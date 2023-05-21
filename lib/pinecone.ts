@@ -156,6 +156,57 @@ export async function plainTextFileToEmbeddings(
   return;
 }
 
+export type PineconeAuth = {
+  environment: string;
+  apiKey: string;
+  indexName: string;
+};
+
+export type OpenAIAuth = {
+  apiKey: string;
+};
+
+export async function getAnswer(
+  text: string,
+  options: {
+    pinecone: PineconeAuth;
+    openai: OpenAIAuth;
+  }
+): Promise<{
+    text: string;
+    sourceDocuments: string[];
+}> {
+  await pinecone.init({
+    environment: options.pinecone.environment,
+    apiKey: options.pinecone.apiKey,
+  });
+  const index = pinecone.Index(options.pinecone.indexName);
+  const vectorStore = await PineconeStore.fromExistingIndex(
+    new OpenAIEmbeddings({
+      openAIApiKey: options.openai.apiKey,
+    }),
+    { pineconeIndex: index }
+  );
+
+  const model = new OpenAI({
+    openAIApiKey: options.openai.apiKey,
+  });
+
+  const chain = VectorDBQAChain.fromLLM(model, vectorStore, {
+    k: 1,
+    returnSourceDocuments: true,
+  });
+
+  const response = await chain.call({ query: text });
+
+  return {
+    text: response.text,
+    sourceDocuments: response.sourceDocuments.map((doc: any) => {
+      return doc.metadata.sourceDisplayName;
+    }),
+  };
+}
+
 export async function askQuestion(question: string) {
   // get the cookies
   const environment = cookies().get(CookiesEnum.pineconeEnvironment);
@@ -173,38 +224,17 @@ export async function askQuestion(question: string) {
   const indexNameValue = indexName.value;
   const openAIApiKeyValue = openAIApiKey.value;
 
-  // add to pinecone
-  await pinecone.init({
-    environment: environmentValue,
-    apiKey: apiKeyValue,
+  return await getAnswer(question, {
+    pinecone: {
+      environment: environmentValue,
+      apiKey: apiKeyValue,
+      indexName: indexNameValue,
+    },
+    openai: {
+      apiKey: openAIApiKeyValue,
+    },
   });
-  const index = pinecone.Index(indexNameValue);
-
-  const vectorStore = await PineconeStore.fromExistingIndex(
-    new OpenAIEmbeddings({
-      openAIApiKey: openAIApiKeyValue,
-    }),
-    { pineconeIndex: index }
-  );
-
-
-  const model = new OpenAI({
-    openAIApiKey: openAIApiKeyValue,
-  });
-
-  const chain = VectorDBQAChain.fromLLM(model, vectorStore, {
-    k: 1,
-    returnSourceDocuments: true,
-  });
-
-  const response = await chain.call({ query: question });
-
-  return {
-    text: response.text,
-    sourceDocuments: response.sourceDocuments.map((doc: any) => { return doc.metadata.sourceDisplayName })
-  };
 }
-
 
 export async function getAllEmbeddings(dimensions: number = 1536) {
   // get the cookies
@@ -236,7 +266,7 @@ export async function getAllEmbeddings(dimensions: number = 1536) {
       vector: new Array(dimensions).fill(0),
       includeMetadata: true,
       includeValues: false,
-    }
+    },
   });
 
   // group by source display name
@@ -244,18 +274,18 @@ export async function getAllEmbeddings(dimensions: number = 1536) {
   if (!embeddings.matches) {
     return groupedEmbeddings;
   }
-    for (const match of embeddings.matches) {
-      if (!match.metadata) {
-        continue;
-      }
-        // @ts-ignore
-      const sourceDisplayName = match.metadata.sourceDisplayName;
-        if (!groupedEmbeddings.has(sourceDisplayName)) {
-            groupedEmbeddings.set(sourceDisplayName, []);
-        }
-        // @ts-ignore
-      groupedEmbeddings.get(sourceDisplayName)?.push(match.metadata.text);
+  for (const match of embeddings.matches) {
+    if (!match.metadata) {
+      continue;
     }
+    // @ts-ignore
+    const sourceDisplayName = match.metadata.sourceDisplayName;
+    if (!groupedEmbeddings.has(sourceDisplayName)) {
+      groupedEmbeddings.set(sourceDisplayName, []);
+    }
+    // @ts-ignore
+    groupedEmbeddings.get(sourceDisplayName)?.push(match.metadata.text);
+  }
 
-    return groupedEmbeddings;
+  return groupedEmbeddings;
 }

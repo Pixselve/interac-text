@@ -3,8 +3,12 @@ import { SubmitHandler, useForm } from "react-hook-form";
 import { PineconeClient } from "@pinecone-database/pinecone";
 import { useCallback, useEffect, useRef, useState } from "react";
 import CreateIndexDialog from "@/components/CreateIndexDialog";
-import {getIndexAndSetCookies, getIndexes, saveIndexToCookies} from "@/lib/pinecone";
-import {saveApiKeyToCookies} from "@/lib/openAI";
+import {
+  getIndexAndSetCookies,
+  getIndexes,
+  saveIndexToCookies,
+} from "@/lib/pinecone";
+import { saveApiKeyToCookies } from "@/lib/openAI";
 
 type PineconeSettingsInputs = {
   environment: string;
@@ -33,9 +37,9 @@ function PineconeSettingsForm({
     formState: { errors },
   } = useForm<PineconeSettingsInputs>({
     defaultValues: {
-        environment,
-        apiKey
-    }
+      environment,
+      apiKey,
+    },
   });
 
   const onSubmit: SubmitHandler<PineconeSettingsInputs> = async (data) => {
@@ -99,16 +103,16 @@ export default function ({
   const onIndexAndOpenAISubmit: SubmitHandler<IndexAndOpenAI> = async (
     data
   ) => {
-      await saveIndexToCookies(data.index);
-      await saveApiKeyToCookies(data.openAIApiKey);
-
+    await saveIndexToCookies(data.index);
+    await saveApiKeyToCookies(data.openAIApiKey);
+    // refresh the page
+    window.location.reload();
   };
 
   const [environment, setEnvironment] = useState(pineconeEnvironment ?? "");
   const [apiKey, setApiKey] = useState(pineconeApiKey ?? "");
   const [pineconeIndexesState, setPineconeIndexesState] =
     useState(pineconeIndexes);
-
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
